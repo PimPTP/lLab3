@@ -32,7 +32,7 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-
+#define EEPROM_ADDR 0b10100000
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -41,6 +41,10 @@
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
+I2C_HandleTypeDef hi2c1;
+DMA_HandleTypeDef hdma_i2c1_rx;
+DMA_HandleTypeDef hdma_i2c1_tx;
+
 UART_HandleTypeDef hlpuart1;
 DMA_HandleTypeDef hdma_lpuart1_rx;
 DMA_HandleTypeDef hdma_lpuart1_tx;
@@ -48,6 +52,8 @@ DMA_HandleTypeDef hdma_lpuart1_tx;
 /* USER CODE BEGIN PV */
 uint8_t RxBuffer[50];
 uint8_t TxBuffer[50];
+uint8_t score = 0;
+uint8_t eepromData[1];
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -55,8 +61,11 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_DMA_Init(void);
 static void MX_LPUART1_UART_Init(void);
+static void MX_I2C1_Init(void);
 /* USER CODE BEGIN PFP */
 void UARTConfig();
+void WriteScore();
+void ReadScore();
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -94,8 +103,9 @@ int main(void)
   MX_GPIO_Init();
   MX_DMA_Init();
   MX_LPUART1_UART_Init();
+  MX_I2C1_Init();
   /* USER CODE BEGIN 2 */
-  uint8_t text[] = "Catch the Light!";
+  uint8_t text[] = "Catch the Light!\r\n";
   HAL_UART_Transmit(&hlpuart1, text, 20, 10);
   UARTConfig();
   /* USER CODE END 2 */
@@ -156,6 +166,54 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
+}
+
+/**
+  * @brief I2C1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_I2C1_Init(void)
+{
+
+  /* USER CODE BEGIN I2C1_Init 0 */
+
+  /* USER CODE END I2C1_Init 0 */
+
+  /* USER CODE BEGIN I2C1_Init 1 */
+
+  /* USER CODE END I2C1_Init 1 */
+  hi2c1.Instance = I2C1;
+  hi2c1.Init.Timing = 0x30A0A7FB;
+  hi2c1.Init.OwnAddress1 = 0;
+  hi2c1.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
+  hi2c1.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
+  hi2c1.Init.OwnAddress2 = 0;
+  hi2c1.Init.OwnAddress2Masks = I2C_OA2_NOMASK;
+  hi2c1.Init.GeneralCallMode = I2C_GENERALCALL_DISABLE;
+  hi2c1.Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
+  if (HAL_I2C_Init(&hi2c1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure Analogue filter
+  */
+  if (HAL_I2CEx_ConfigAnalogFilter(&hi2c1, I2C_ANALOGFILTER_ENABLE) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure Digital filter
+  */
+  if (HAL_I2CEx_ConfigDigitalFilter(&hi2c1, 0) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN I2C1_Init 2 */
+
+  /* USER CODE END I2C1_Init 2 */
+
 }
 
 /**
@@ -222,6 +280,12 @@ static void MX_DMA_Init(void)
   /* DMA1_Channel2_IRQn interrupt configuration */
   HAL_NVIC_SetPriority(DMA1_Channel2_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(DMA1_Channel2_IRQn);
+  /* DMA1_Channel3_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Channel3_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Channel3_IRQn);
+  /* DMA1_Channel4_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Channel4_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Channel4_IRQn);
 
 }
 
@@ -269,7 +333,7 @@ static void MX_GPIO_Init(void)
 /* USER CODE BEGIN 4 */
 void UARTConfig()
 {
-	HAL_UART_Receive_DMA(&huart1, RxBuffer, 5);
+	HAL_UART_Receive_DMA(&hlpuart1, RxBuffer, 5);
 }
 
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
@@ -278,11 +342,30 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 	{
 		RxBuffer[5] = '\0';
 
+		sprintf((char*)TxBuffer,"Received : %s\r\n",RxBuffer);
+		HAL_UART_Transmit_DMA(&huart1, TxBuffer, strlen((char*)TxBuffer));
+
 		if (strstr((char*)RxBuffer, "score") != NULL){
-			uint8_t score = readscore();
+			score = ReadScore();
 			sprintf((char*)TxBuffer,"Score : %d\r\n",score);
-			HAL_UART_Transmit_DMA(&huart1, TxBuffer, strlen((char*)TxBuffer));
+			HAL_UART_Transmit_DMA(&hlpuart1, TxBuffer, strlen((char*)TxBuffer));
 		}
+
+		HAL_UART_Receive_DMA(&hlpuart1, RxBuffer, 5);
+	}
+}
+
+void WriteScore(uint8_t scorevalue)
+{
+	if(hi2c1.State == HAL_I2C_STATE_READY){
+		HAL_I2C_Mem_Write_IT(&hi2c1, EEPROM_ADDR, 0x00, I2C_MEMADD_SIZE_16BIT, &scorevalue, 1);
+	}
+}
+
+void ReadScore()
+{
+	if(hi2c1.State == HAL_I2C_STATE_READY){
+		HAL_I2C_Mem_Read_IT(&hi2c1, EEPROM_ADDR, 0x00, I2C_MEMADD_SIZE_16BIT, eepromData, 1);
 	}
 }
 /* USER CODE END 4 */
