@@ -49,11 +49,18 @@ UART_HandleTypeDef hlpuart1;
 DMA_HandleTypeDef hdma_lpuart1_rx;
 DMA_HandleTypeDef hdma_lpuart1_tx;
 
+SPI_HandleTypeDef hspi3;
+
 /* USER CODE BEGIN PV */
 uint8_t RxBuffer[50];
 uint8_t TxBuffer[50];
 uint8_t score = 0;
 uint8_t eepromData[1];
+uint8_t SPIRx[10];
+uint8_t SPITx[10];
+uint8_t state = 0;
+uint32_t startTime = 0;
+uint8_t LED;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -62,10 +69,15 @@ static void MX_GPIO_Init(void);
 static void MX_DMA_Init(void);
 static void MX_LPUART1_UART_Init(void);
 static void MX_I2C1_Init(void);
+static void MX_SPI3_Init(void);
 /* USER CODE BEGIN PFP */
 void UARTConfig();
 void WriteScore();
-void ReadScore();
+uint8_t ReadScore();
+void ShowReadyLED();
+void TurnOffLED();
+void LightRandomLED();
+bool CheckButtonPress();
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -104,10 +116,12 @@ int main(void)
   MX_DMA_Init();
   MX_LPUART1_UART_Init();
   MX_I2C1_Init();
+  MX_SPI3_Init();
   /* USER CODE BEGIN 2 */
   uint8_t text[] = "Catch the Light!\r\n";
   HAL_UART_Transmit(&hlpuart1, text, 20, 10);
   UARTConfig();
+  SPITxRx_Setup();
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -117,7 +131,43 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-
+	  switch(state){
+	  case 0:
+		  uint8_t starttext[] = "Press Button to Start\r\n";
+		  HAL_UART_Transmit(&hlpuart1, starttext, 30, 10);
+		  if(HAL_GPIO_ReadPin(B1_GPIO_Port, B1_Pin)){
+			  ShowReadyLED();
+			  state = 1;
+		  }
+			  break;
+		  case 1:
+			  TurnOffLED();
+			  startTime = HAL_GetTick();
+			  score = 0;
+			  LightRandomLED();
+			  state = 2;
+			  break;
+		  case 2:
+			  if ((HAL_GetTick()-startTime) >= 90000){
+				  TurnOffLED();
+				  WriteScore(score);
+				  uint8_t endtext[] = "Game Finished\r\n";
+				  HAL_UART_Transmit(&hlpuart1, endtext, 20, 10);
+				  sprintf((char*)TxBuffer,"Score : %d\r\n",score);
+				  HAL_UART_Transmit_DMA(&hlpuart1, TxBuffer, strlen((char*)TxBuffer));
+				  state = 0;
+			  }
+			  else
+			  {
+				  bool pressed = CheckButtonPress();
+				  if(pressed){
+					  score++;
+					  TurnOffLED();
+					  LightRandomLED();
+				  }
+			  }
+			  break;
+	  }
   }
   /* USER CODE END 3 */
 }
@@ -264,6 +314,46 @@ static void MX_LPUART1_UART_Init(void)
 }
 
 /**
+  * @brief SPI3 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_SPI3_Init(void)
+{
+
+  /* USER CODE BEGIN SPI3_Init 0 */
+
+  /* USER CODE END SPI3_Init 0 */
+
+  /* USER CODE BEGIN SPI3_Init 1 */
+
+  /* USER CODE END SPI3_Init 1 */
+  /* SPI3 parameter configuration*/
+  hspi3.Instance = SPI3;
+  hspi3.Init.Mode = SPI_MODE_MASTER;
+  hspi3.Init.Direction = SPI_DIRECTION_2LINES;
+  hspi3.Init.DataSize = SPI_DATASIZE_8BIT;
+  hspi3.Init.CLKPolarity = SPI_POLARITY_LOW;
+  hspi3.Init.CLKPhase = SPI_PHASE_1EDGE;
+  hspi3.Init.NSS = SPI_NSS_SOFT;
+  hspi3.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_256;
+  hspi3.Init.FirstBit = SPI_FIRSTBIT_MSB;
+  hspi3.Init.TIMode = SPI_TIMODE_DISABLE;
+  hspi3.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
+  hspi3.Init.CRCPolynomial = 7;
+  hspi3.Init.CRCLength = SPI_CRC_LENGTH_DATASIZE;
+  hspi3.Init.NSSPMode = SPI_NSS_PULSE_ENABLE;
+  if (HAL_SPI_Init(&hspi3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN SPI3_Init 2 */
+
+  /* USER CODE END SPI3_Init 2 */
+
+}
+
+/**
   * Enable DMA controller clock
   */
 static void MX_DMA_Init(void)
@@ -304,10 +394,14 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOC_CLK_ENABLE();
   __HAL_RCC_GPIOF_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
+  __HAL_RCC_GPIOD_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOD, GPIO_PIN_2, GPIO_PIN_SET);
 
   /*Configure GPIO pin : B1_Pin */
   GPIO_InitStruct.Pin = B1_Pin;
@@ -321,6 +415,13 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(LD2_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : PD2 */
+  GPIO_InitStruct.Pin = GPIO_PIN_2;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
 
   /* EXTI interrupt init*/
   HAL_NVIC_SetPriority(EXTI15_10_IRQn, 0, 0);
@@ -362,11 +463,76 @@ void WriteScore(uint8_t scorevalue)
 	}
 }
 
-void ReadScore()
+uint8_t ReadScore()
 {
 	if(hi2c1.State == HAL_I2C_STATE_READY){
 		HAL_I2C_Mem_Read_IT(&hi2c1, EEPROM_ADDR, 0x00, I2C_MEMADD_SIZE_16BIT, eepromData, 1);
 	}
+	return eepromData[0];
+}
+
+void SPITxRx_Setup()
+{
+//CS pulse
+HAL_GPIO_WritePin(GPIOD, GPIO_PIN_2, 0); // CS Select
+HAL_Delay(1);
+HAL_GPIO_WritePin(GPIOD, GPIO_PIN_2, 1); // CS deSelect
+HAL_Delay(1);
+}
+
+void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi)
+{
+HAL_GPIO_WritePin(GPIOD, GPIO_PIN_2, 1); //CS deSelect
+}
+
+void ShowReadyLED(){
+	if(HAL_GPIO_ReadPin(GPIOD,GPIO_PIN_2)){
+	HAL_GPIO_WritePin(GPIOD, GPIO_PIN_2, 0); // CS Select
+	SPITx[0] = 0b01000000;
+	SPITx[1] = 0x13;
+	SPITx[2] = 0x0F;
+	SPITx[3] = 0;
+	HAL_SPI_TransmitReceive_IT(&hspi3, SPITx, SPIRx, 4);
+	}
+}
+
+void TurnOffLED(){
+	if(HAL_GPIO_ReadPin(GPIOD,GPIO_PIN_2)){
+	HAL_GPIO_WritePin(GPIOD, GPIO_PIN_2, 0); // CS Select
+	SPITx[0] = 0b01000000;
+	SPITx[1] = 0x13;
+	SPITx[2] = 0x00;
+	SPITx[3] = 0;
+	HAL_SPI_TransmitReceive_IT(&hspi3, SPITx, SPIRx, 4);
+	}
+}
+
+void LightRandomLED(){
+	uint8_t LEDIndex = rand()%4;
+	LED = (1 << LEDIndex);
+	if(HAL_GPIO_ReadPin(GPIOD,GPIO_PIN_2)){
+	HAL_GPIO_WritePin(GPIOD, GPIO_PIN_2, 0); // CS Select
+	SPITx[0] = 0b01000000;
+	SPITx[1] = 0x13;
+	SPITx[2] = LED;
+	SPITx[3] = 0;
+	HAL_SPI_TransmitReceive_IT(&hspi3, SPITx, SPIRx, 4);
+	}
+}
+
+bool CheckButtonPress(){
+	uint8_t button;
+	if(HAL_GPIO_ReadPin(GPIOD,GPIO_PIN_2)){
+	HAL_GPIO_WritePin(GPIOD, GPIO_PIN_2, 0); // CS Select
+	SPITx[0] = 0b01000001;
+	SPITx[1] = 0x12;
+	SPITx[2] = 0;
+	SPITx[3] = 0;
+	HAL_SPI_TransmitReceive_IT(&hspi3, SPITx, SPIRx, 4);
+	}
+	button = SPIRx[2];
+	if(button & LED){return true;}
+	return false;
 }
 /* USER CODE END 4 */
 
