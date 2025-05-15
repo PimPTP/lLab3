@@ -23,6 +23,7 @@
 /* USER CODE BEGIN Includes */
 #include "stdio.h"
 #include "string.h"
+#include <stdbool.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -72,7 +73,7 @@ static void MX_I2C1_Init(void);
 static void MX_SPI3_Init(void);
 /* USER CODE BEGIN PFP */
 void UARTConfig();
-void WriteScore();
+void WriteScore(uint8_t scorevalue);
 uint8_t ReadScore();
 void ShowReadyLED();
 void TurnOffLED();
@@ -118,8 +119,8 @@ int main(void)
   MX_I2C1_Init();
   MX_SPI3_Init();
   /* USER CODE BEGIN 2 */
-  uint8_t text[] = "Catch the Light!\r\n";
-  HAL_UART_Transmit(&hlpuart1, text, 20, 10);
+  uint8_t text[] = "Catch the Light!\r\nPress Button to Start\r\n\0";
+  HAL_UART_Transmit(&hlpuart1, text, 50, 10);
   UARTConfig();
   SPITxRx_Setup();
   /* USER CODE END 2 */
@@ -133,10 +134,10 @@ int main(void)
     /* USER CODE BEGIN 3 */
 	  switch(state){
 	  case 0:
-		  uint8_t starttext[] = "Press Button to Start\r\n";
-		  HAL_UART_Transmit(&hlpuart1, starttext, 30, 10);
 		  if(HAL_GPIO_ReadPin(B1_GPIO_Port, B1_Pin)){
 			  ShowReadyLED();
+			  uint8_t starttext[] = "Game Started\r\n";
+			  HAL_UART_Transmit(&hlpuart1, starttext, 20, 10);
 			  state = 1;
 		  }
 			  break;
@@ -282,7 +283,7 @@ static void MX_LPUART1_UART_Init(void)
 
   /* USER CODE END LPUART1_Init 1 */
   hlpuart1.Instance = LPUART1;
-  hlpuart1.Init.BaudRate = 115200;
+  hlpuart1.Init.BaudRate = 57600;
   hlpuart1.Init.WordLength = UART_WORDLENGTH_9B;
   hlpuart1.Init.StopBits = UART_STOPBITS_1;
   hlpuart1.Init.Parity = UART_PARITY_EVEN;
@@ -439,12 +440,12 @@ void UARTConfig()
 
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
-	if(huart == &huart1)
+	if(huart == &hlpuart1)
 	{
 		RxBuffer[5] = '\0';
 
 		sprintf((char*)TxBuffer,"Received : %s\r\n",RxBuffer);
-		HAL_UART_Transmit_DMA(&huart1, TxBuffer, strlen((char*)TxBuffer));
+		HAL_UART_Transmit_DMA(&hlpuart1, TxBuffer, strlen((char*)TxBuffer));
 
 		if (strstr((char*)RxBuffer, "score") != NULL){
 			score = ReadScore();
@@ -531,8 +532,7 @@ bool CheckButtonPress(){
 	HAL_SPI_TransmitReceive_IT(&hspi3, SPITx, SPIRx, 4);
 	}
 	button = SPIRx[2];
-	if(button & LED){return true;}
-	return false;
+	return (button & LED)?true:false;
 }
 /* USER CODE END 4 */
 
