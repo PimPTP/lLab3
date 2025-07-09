@@ -11,7 +11,7 @@
 ../Core/Src/main.c:467:9:ReadScore	16	static
 ../Core/Src/main.c:475:6:SPITxRx_Setup	8	static
 ../Core/Src/main.c:484:6:HAL_SPI_TxRxCpltCallback	16	static
-../Core/Src/main.c:489:6:ShowReadyLED	8	static
+../Core/Src/main.c:489:6:TurnOnLED	8	static
 ../Core/Src/main.c:500:6:TurnOffLED	8	static
 ../Core/Src/main.c:511:6:LightRandomLED	16	static
 ../Core/Src/main.c:524:6:CheckButtonPress	16	static

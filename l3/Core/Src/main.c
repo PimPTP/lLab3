@@ -75,7 +75,7 @@ static void MX_SPI3_Init(void);
 void UARTConfig();
 void WriteScore(uint8_t scorevalue);
 uint8_t ReadScore();
-void ShowReadyLED();
+void TurnOnLED();
 void TurnOffLED();
 void LightRandomLED();
 bool CheckButtonPress();
@@ -120,7 +120,7 @@ int main(void)
   MX_SPI3_Init();
   /* USER CODE BEGIN 2 */
   uint8_t text[] = "Catch the Light!\r\nPress Button to Start\r\n\0";
-  HAL_UART_Transmit(&hlpuart1, text, 50, 10);
+  HAL_UART_Transmit(&hlpuart1, text, strlen(text), 10);
   UARTConfig();
   SPITxRx_Setup();
   /* USER CODE END 2 */
@@ -135,9 +135,9 @@ int main(void)
 	  switch(state){
 	  case 0:
 		  if(HAL_GPIO_ReadPin(B1_GPIO_Port, B1_Pin)){
-			  ShowReadyLED();
+			  TurnOnLED();
 			  uint8_t starttext[] = "Game Started\r\n";
-			  HAL_UART_Transmit(&hlpuart1, starttext, 20, 10);
+			  HAL_UART_Transmit(&hlpuart1, starttext, strlen(starttext), 10);
 			  state = 1;
 		  }
 			  break;
@@ -153,7 +153,7 @@ int main(void)
 				  TurnOffLED();
 				  WriteScore(score);
 				  uint8_t endtext[] = "Game Finished\r\n";
-				  HAL_UART_Transmit(&hlpuart1, endtext, 20, 10);
+				  HAL_UART_Transmit(&hlpuart1, endtext, strlen(endtext), 10);
 				  sprintf((char*)TxBuffer,"Score : %d\r\n",score);
 				  HAL_UART_Transmit_DMA(&hlpuart1, TxBuffer, strlen((char*)TxBuffer));
 				  state = 0;
@@ -486,7 +486,7 @@ void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi)
 HAL_GPIO_WritePin(GPIOD, GPIO_PIN_2, 1); //CS deSelect
 }
 
-void ShowReadyLED(){
+void TurnOnLED(){
 	if(HAL_GPIO_ReadPin(GPIOD,GPIO_PIN_2)){
 	HAL_GPIO_WritePin(GPIOD, GPIO_PIN_2, 0); // CS Select
 	SPITx[0] = 0b01000000;
